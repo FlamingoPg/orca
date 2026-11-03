@@ -54,7 +54,11 @@ export function prepareStructuredLaunchCreateMessage(
     notifyStructuredLaunchListeners()
     return
   }
-  const firstMessage = prepareStructuredLaunchPromptForCreate(intent.sessionId, intent.target)
+  const firstMessage = prepareStructuredLaunchPromptForCreate(
+    intent.sessionId,
+    intent.target,
+    intent.sendSkillsSupport === true
+  )
   const { options: requested, selection } = structuredLaunchCreateOptions(state)
   const options =
     requested && state.selection.explicit && !optionsMode

@@ -17,6 +17,7 @@ import {
   subscribeToLocalImageCacheInvalidation,
   unpinLocalImageCache
 } from './local-image-src-cache'
+import { readBrowserAttachmentFile } from '@/lib/browser-attachment-files'
 import { runtimeTargetEnvironmentId } from '@/runtime/runtime-client-target'
 
 export function getLocalImageCacheKey(
@@ -77,6 +78,9 @@ export function getLocalImageSrcCacheKey(
   runtimeContext?: LocalImageRuntimeContext | null,
   access?: LocalFileAccess
 ): string | null {
+  if (rawSrc && readBrowserAttachmentFile(rawSrc)) {
+    return getLocalImageCacheKey(rawSrc)
+  }
   if (!rawSrc || isExternalUrl(rawSrc) || runtimeContext === null) {
     return null
   }
@@ -101,6 +105,9 @@ export function useLocalImageSrc(
   // Key leases by semantic identity; equal rebuilt context objects must not revoke a still-displayed image URL.
   const cacheKey = getLocalImageSrcCacheKey(rawSrc, filePath, connectionId, runtimeContext, access)
   const readImage = useEffectEvent((): Promise<string | null> => {
+    if (rawSrc && readBrowserAttachmentFile(rawSrc)) {
+      return loadLocalImageAbsolutePath(rawSrc)
+    }
     const absolutePath = rawSrc ? resolveImageAbsolutePath(rawSrc, filePath) : null
     return absolutePath
       ? loadLocalImageAbsolutePath(absolutePath, connectionId, runtimeContext, access)
@@ -167,6 +174,9 @@ export async function loadLocalImageSrc(
     | null,
   access?: LocalFileAccess
 ): Promise<string | null> {
+  if (readBrowserAttachmentFile(rawSrc)) {
+    return loadLocalImageAbsolutePath(rawSrc)
+  }
   if (isExternalUrl(rawSrc)) {
     return rawSrc
   }
@@ -203,6 +213,16 @@ export function loadLocalImageAbsolutePath(
   const cached = blobUrlCache.get(cacheKey)
   if (cached) {
     return Promise.resolve(cached)
+  }
+
+  const browserFile = readBrowserAttachmentFile(absolutePath)
+  if (browserFile) {
+    const url = URL.createObjectURL(browserFile)
+    return Promise.resolve(
+      cacheLocalImageBlob(cacheKey, url, browserFile.size, getLocalImageCacheKeyVersion(cacheKey))
+        ? url
+        : null
+    )
   }
 
   const inFlight = inFlightBlobUrlLoads.get(cacheKey)

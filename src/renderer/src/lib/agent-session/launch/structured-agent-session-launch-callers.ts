@@ -5,6 +5,7 @@ import type {
   StagedStructuredLaunchPrompt,
   StructuredPromptDeliveryResult
 } from '@/lib/agent-session/launch/structured-agent-session-launch-prompt'
+import type { StructuredLaunchPromptOptions } from './structured-agent-session-launch-prompt'
 import type { StructuredAgentSessionResumeSource } from '../../../../../shared/agent-session/structured-agent-session-create'
 import type { RuntimeClientTarget } from '../../../../../shared/runtime-client-target'
 import type { ExecutionHostId } from '../../../../../shared/execution-host'
@@ -12,7 +13,7 @@ import type { StructuredLaunchAttempt } from './structured-agent-session-launch-
 import type { AgentLaunchRequestId } from '../../agent-launch-request-id'
 import type { StructuredAgentSessionCreateGate } from './structured-agent-session-launch-errors'
 
-export type StructuredAgentLaunchOptions = {
+export type StructuredAgentLaunchOptions = StructuredLaunchPromptOptions & {
   /** The user action this start serves; only a re-delivery of it joins its chat. */
   requestId: AgentLaunchRequestId
   /** Background launches never ask host publication to select their tab. */

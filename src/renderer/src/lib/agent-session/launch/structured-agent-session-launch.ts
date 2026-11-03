@@ -146,8 +146,13 @@ function restartStructuredLaunchState(state: StructuredLaunchState): void {
   notifyStructuredLaunchListeners()
 }
 
-function promptOwner(options: StructuredAgentLaunchOptions): { callerKeepsText?: true } {
-  return options.promptKeptByCaller ? { callerKeepsText: true } : {}
+function promptOwner(options: StructuredAgentLaunchOptions) {
+  return {
+    ...(options.promptKeptByCaller ? { callerKeepsText: true as const } : {}),
+    attachments: options.promptAttachments,
+    skills: options.promptSkills,
+    prepare: options.preparePrompt
+  }
 }
 
 function joinStructuredLaunchState(
@@ -160,9 +165,11 @@ function joinStructuredLaunchState(
   const joined = joinLaunchDelivery(options, existing.promptDelivery)
   // Unconfirmed launches retain text; rechecks must not stage/send a second copy.
   const text = retrying || repeat ? '' : launchPromptText(joined)
-  const stagedPrompt = text
-    ? stageStructuredLaunchPrompt(existing.intent.sessionId, text, promptOwner(options))
-    : (repeat?.stagedPrompt ?? null)
+  const stagedPrompt =
+    text ||
+    (!retrying && !repeat && joined.promptDelivery !== 'draft' && joined.promptAttachments?.length)
+      ? stageStructuredLaunchPrompt(existing.intent.sessionId, text, promptOwner(options))
+      : (repeat?.stagedPrompt ?? null)
   if (retrying) {
     restartStructuredLaunchState(existing)
   } else if (!options.resumeFrom?.cliSource) {
@@ -210,9 +217,10 @@ function structuredAgentLaunchState(
   intent.createAfter = options.createAfter
   intent.surfaceAddress = options.surfaceAddress
   const text = launchPromptText(options)
-  const stagedPrompt = text
-    ? stageStructuredLaunchPrompt(intent.sessionId, text, promptOwner(options))
-    : null
+  const stagedPrompt =
+    text || (options.promptDelivery !== 'draft' && options.promptAttachments?.length)
+      ? stageStructuredLaunchPrompt(intent.sessionId, text, promptOwner(options))
+      : null
   const callers = createStructuredLaunchCallerGroup({
     kind: 'first',
     requestId: options.requestId,

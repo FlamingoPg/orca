@@ -1,4 +1,7 @@
-import { AGENT_SESSION_SEND_SELECTION_RUNTIME_CAPABILITY } from '../../../../../shared/agent-session/agent-session-create-capabilities'
+import {
+  AGENT_SESSION_SEND_SELECTION_RUNTIME_CAPABILITY,
+  AGENT_SESSION_SEND_SKILLS_RUNTIME_CAPABILITY
+} from '../../../../../shared/agent-session/agent-session-create-capabilities'
 import type {
   AgentSessionAttachResult,
   AgentSessionMutationResult
@@ -147,6 +150,10 @@ export async function launchStructuredAgentSession(
       intent.sendSelectionSupport = await structuredAgentSessionHostSupports(
         intent.target,
         AGENT_SESSION_SEND_SELECTION_RUNTIME_CAPABILITY
+      )
+      intent.sendSkillsSupport = await structuredAgentSessionHostSupports(
+        intent.target,
+        AGENT_SESSION_SEND_SKILLS_RUNTIME_CAPABILITY
       )
     } catch {
       // Unknown capability stays on the compatible create path.
