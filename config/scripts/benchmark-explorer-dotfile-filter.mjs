@@ -8,7 +8,8 @@ import { build } from 'esbuild'
 // Pass the pre-change file-explorer-entries.ts snapshot as the only argument.
 const baselinePath = process.argv[2]
 assert.ok(baselinePath, 'Pass a pre-change file-explorer-entries.ts snapshot.')
-const entry = 'src/renderer/src/components/right-sidebar/file-explorer-entries.ts'
+const entry =
+  'src/renderer/src/components/right-sidebar/file-explorer/tree/file-explorer-entries.ts'
 const baseline = readFileSync(baselinePath, 'utf8')
 assert.notEqual(baseline, readFileSync(entry, 'utf8'), 'Do not compare the source to itself.')
 
@@ -16,7 +17,7 @@ async function load(useBaseline) {
   const result = await build({
     stdin: {
       contents: `export { isDotfileRelativePath } from './${entry}';
-export { createNameFilteredFileExplorerProjection } from './src/renderer/src/components/right-sidebar/file-explorer-name-filter-projection.ts';`,
+export { createNameFilteredFileExplorerProjection } from './src/renderer/src/components/right-sidebar/file-explorer/tree/file-explorer-name-filter-projection.ts';`,
       resolveDir: process.cwd(),
       loader: 'ts'
     },

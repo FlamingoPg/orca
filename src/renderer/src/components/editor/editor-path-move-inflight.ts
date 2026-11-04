@@ -1,4 +1,4 @@
-import { normalizeAbsolutePathForComparison } from '@/components/right-sidebar/file-explorer-paths'
+import { normalizeAbsolutePathForComparison } from '@/components/right-sidebar/file-explorer/navigation/file-explorer-paths'
 
 // Track source-root delete echoes until rename and rekey settle, without a TTL that could race slow SSH moves. The coordinator verifies destinations.
 

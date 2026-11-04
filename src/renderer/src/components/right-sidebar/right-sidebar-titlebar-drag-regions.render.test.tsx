@@ -150,7 +150,7 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
   }
 }))
 
-vi.mock('./FileExplorer', () => ({
+vi.mock('./file-explorer/panel/FileExplorer', () => ({
   default: () => <div data-file-explorer />
 }))
 

@@ -3,7 +3,7 @@ import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 import type { ActiveRightSidebarTab } from '@/store/slices/editor'
 import { isPluginPanelTabKey } from '../../../../shared/plugins/manifest/plugin-manifest'
 
-const FileExplorer = lazy(() => import('./FileExplorer'))
+const FileExplorer = lazy(() => import('./file-explorer/panel/FileExplorer'))
 const SourceControl = lazy(() => import('./SourceControl'))
 const ChecksPanel = lazy(() => import('./ChecksPanel'))
 const PortsPanel = lazy(() => import('./PortsPanel'))
