@@ -4,7 +4,7 @@ import { ownRetainedString } from '../../own-retained-string'
 import type { ProgramStatusFacet } from '../../program-status/facet'
 import type { AgentStatus } from '../title/agent-title-core'
 
-const OSC_AGENT_STATUS_PREFIX = '\x1b]9999;'
+export const OSC_AGENT_STATUS_PREFIX = '\x1b]9999;'
 
 /** Return a suffix that can only be the beginning of an OSC 9999 marker. */
 function findAgentStatusPrefixCarry(data: string): string {

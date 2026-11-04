@@ -1,241 +1,123 @@
 // Snapshots serialize cells, not xterm’s pending parser bytes. Carry the incomplete escape after the screen so the next live chunk completes it instead of printing it (Bug E).
 
-import { classifyTerminalEscapeIntroducer } from './terminal-escape-introducer'
+import {
+  executesWithinVtState,
+  isVtStringState,
+  isLowSurrogate,
+  startsVtSequence,
+  VtCursor,
+  VtState
+} from './terminal-vt500-parser-state'
 
-// Mirror xterm’s VT500 states; C0 controls except ESC/CAN/SUB execute without aborting the sequence.
-type ScanState =
-  | 'ground'
-  | 'esc'
-  | 'escIntermediate'
-  | 'csi'
-  | 'osc'
-  | 'oscEsc'
-  | 'string'
-  | 'stringEsc'
-
-const ESC = 0x1b
 const CAN = 0x18
 const SUB = 0x1a
-const BEL = 0x07
+const ESC = 0x1b
+const ST = 0x9c
 
 // Bound unterminated OSC/DCS memory and snapshot size; beyond the cap, abandon carry and lose partial-sequence fidelity.
 export const MAX_PARTIAL_ESCAPE_TAIL_LENGTH = 4096
 
-/** ESC-state transition shared by the fresh-ESC and abort-reprocess paths. */
-function stateAfterEscByte(code: number): ScanState {
-  switch (classifyTerminalEscapeIntroducer(code)) {
-    case 'csi':
-      return 'csi'
-    case 'osc':
-      return 'osc'
-    case 'string':
-      return 'string'
-    case 'intermediate':
-      return 'escIntermediate'
-    case 'execute':
-      return 'esc' // the ESC is still pending; a further ESC arrives via the callers
-    case 'final':
-      return 'ground'
+// From ground only ESC and the C1 introducers start a sequence (xterm's anywhere transitions).
+// oxlint-disable-next-line no-control-regex -- matching terminal control introducers is the point.
+const SEQUENCE_START = /[\u001b\u0090\u0098\u009b\u009d-\u009f]/g
+
+function nextSequenceStart(stream: string, from: number): number {
+  if (stream.charCodeAt(from) === ESC) {
+    return from
   }
+  SEQUENCE_START.lastIndex = from
+  return SEQUENCE_START.exec(stream)?.index ?? -1
+}
+
+function hasSequenceStart(chunk: string): boolean {
+  return nextSequenceStart(chunk, 0) !== -1
+}
+
+/** Walk `stream` exactly as xterm's decoder and parser would; `onStart` sees where each sequence begins. */
+function walk(cursor: VtCursor, stream: string, onStart?: (index: number) => void): VtCursor {
+  for (let i = 0; i < stream.length; i++) {
+    if (cursor.grounded || cursor.state === VtState.Ground) {
+      // Plain runs cannot leave ground; jump to the next sequence start.
+      const next = nextSequenceStart(stream, i)
+      cursor.settleInGround()
+      if (next === -1) {
+        return cursor
+      }
+      i = next
+    }
+    const code = stream.charCodeAt(i)
+    if (startsVtSequence(code)) {
+      onStart?.(i)
+    }
+    cursor.feed(code)
+  }
+  return cursor
 }
 
 /** Return the incomplete trailing escape (empty when clean), preserving extract(a + b) === extract(extract(a) + b) for incremental ingest. */
 export function extractPartialEscapeTail(stream: string): string {
-  return scanPartialEscapeTail(stream, false)
+  let start = 0
+  const cursor = walk(new VtCursor(), stream, (index) => {
+    start = index
+  })
+  return cursor.key === '' ? '' : stream.slice(start)
 }
 
-const STATE_PREFIX: Record<ScanState, string> = {
-  ground: '',
-  esc: '\x1b',
-  escIntermediate: '\x1b ',
-  csi: '\x1b[',
-  osc: '\x1b]',
-  oscEsc: '\x1b',
-  string: '\x1bP',
-  stringEsc: '\x1b'
-}
-
-/** Boundary-only fold; its constant-size state is NOT a replayable application tail. */
+/** Boundary-only fold over xterm's parser states; the key is NOT a replayable application tail. */
 export function advanceTerminalEscapeBoundary(statePrefix: string, chunk: string): string {
-  if (!statePrefix && !chunk.includes('\x1b')) {
+  if (!statePrefix && !hasSequenceStart(chunk)) {
     return ''
   }
-  return scanPartialEscapeTail(statePrefix + chunk, true)
+  return walk(VtCursor.fromKey(statePrefix), chunk).key
 }
 
-function scanPartialEscapeTail(stream: string, stateOnly: boolean): string {
-  let state: ScanState = 'ground'
-  let start = 0
-  for (let i = 0; i < stream.length; i++) {
-    if (state === 'ground') {
-      // Only ESC leaves ground; skip plain runs. Check dense-stream ESC directly to avoid indexOf setup per sequence.
-      const escape = stream.charCodeAt(i) === ESC ? i : stream.indexOf('\x1b', i)
-      if (escape === -1) {
-        return ''
-      }
-      start = escape
-      i = escape
-      state = 'esc'
-      continue
-    }
-    const code = stream.charCodeAt(i)
-    if (
-      code === ESC &&
-      state !== 'osc' &&
-      state !== 'string' &&
-      state !== 'oscEsc' &&
-      state !== 'stringEsc'
-    ) {
-      // ESC aborts a pending ESC/CSI sequence and starts a new one.
-      start = i
-      state = 'esc'
-      continue
-    }
-    // ESC/intermediate states need the same CAN/SUB abort as CSI/OSC/string or they retain bogus tails.
-    if ((code === CAN || code === SUB) && (state === 'esc' || state === 'escIntermediate')) {
-      state = 'ground'
-      continue
-    }
-    switch (state) {
-      case 'esc':
-        state = stateAfterEscByte(code)
-        break
-      case 'escIntermediate':
-        if (code >= 0x30 && code <= 0x7e) {
-          state = 'ground'
-        }
-        // 0x20–0x2f stays; other C0 executes and stays (CAN/SUB handled above).
-        break
-      case 'csi':
-        if (code === CAN || code === SUB) {
-          state = 'ground'
-        } else if (code >= 0x40 && code <= 0x7e) {
-          state = 'ground' // final byte completes the CSI
-        }
-        // params/intermediates (0x20–0x3f), C0, DEL stay in-sequence.
-        break
-      case 'osc':
-        if (code === BEL || code === CAN || code === SUB) {
-          state = 'ground'
-        } else if (code === ESC) {
-          state = 'oscEsc'
-        }
-        break
-      case 'oscEsc':
-        if (code === 0x5c) {
-          state = 'ground' // ESC \ = ST terminates the OSC
-        } else {
-          // The ESC aborted the OSC and opened a new sequence at i-1 — except a
-          // second ESC starts its own sequence at i, and CAN/SUB abort to ground.
-          start = code === ESC ? i : i - 1
-          state =
-            code === ESC ? 'esc' : code === CAN || code === SUB ? 'ground' : stateAfterEscByte(code)
-        }
-        break
-      case 'string':
-        if (code === CAN || code === SUB) {
-          state = 'ground'
-        } else if (code === ESC) {
-          state = 'stringEsc'
-        }
-        break
-      case 'stringEsc':
-        if (code === 0x5c) {
-          state = 'ground'
-        } else {
-          start = code === ESC ? i : i - 1
-          state =
-            code === ESC ? 'esc' : code === CAN || code === SUB ? 'ground' : stateAfterEscByte(code)
-        }
-        break
-    }
-  }
-  // ESC already ends a string in xterm; replay only its pending escape state.
-  if (state === 'oscEsc' || state === 'stringEsc') {
-    return '\x1b'
-  }
-  return stateOnly ? STATE_PREFIX[state] : state === 'ground' ? '' : stream.slice(start)
-}
-
-const STATE_BY_PREFIX: Record<string, ScanState> = {
-  '\x1b': 'esc',
-  '\x1b ': 'escIntermediate',
-  '\x1b[': 'csi',
-  '\x1b]': 'osc',
-  '\x1bP': 'string'
-}
-
-/** Chars of chunk that finish the escape left open by advanceTerminalEscapeBoundary's statePrefix; a new ESC ends it unconsumed. -1 when it stays open. */
-export function openEscapeContinuationLength(statePrefix: string, chunk: string): number {
-  let state: ScanState = STATE_BY_PREFIX[statePrefix] ?? 'ground'
-  for (let i = 0; i < chunk.length; i++) {
-    if (state === 'ground') {
-      return i
-    }
-    const code = chunk.charCodeAt(i)
-    if (code === CAN || code === SUB) {
-      return i + 1
-    }
-    switch (state) {
-      case 'esc':
-        if (code === ESC) {
-          return i
-        }
-        state = stateAfterEscByte(code)
-        if (state === 'ground') {
-          return i + 1
-        }
-        break
-      case 'escIntermediate':
-        if (code === ESC) {
-          return i
-        }
-        if (code >= 0x30 && code <= 0x7e) {
-          return i + 1
-        }
-        break
-      case 'csi':
-        if (code === ESC) {
-          return i
-        }
-        if (code >= 0x40 && code <= 0x7e) {
-          return i + 1
-        }
-        break
-      case 'osc':
-      case 'string':
-        if (code === BEL && state === 'osc') {
-          return i + 1
-        }
-        // Keep an ESC that may start a new sequence; if it was a split ST, its backslash later completes a no-op ST.
-        if (code === ESC) {
-          return chunk.charCodeAt(i + 1) === 0x5c ? i + 2 : i
-        }
-        break
-      // Unreachable from a statePrefix (both map to 'esc'); an ESC inside a string either finishes ST or starts a kept sequence.
-      case 'oscEsc':
-      case 'stringEsc':
-        return code === 0x5c ? i + 1 : i
-    }
-  }
-  return state === 'ground' ? chunk.length : -1
-}
-
-/** Drop the part of chunk that continues the escape open in statePrefix; stillOpen carries it when the chunk ends first. */
+/**
+ * Drop the part of chunk that continues the escape open in statePrefix, exactly as xterm would
+ * swallow it: C0 controls xterm executes inside ESC/CSI stay, a new sequence ends it unconsumed,
+ * and stillOpen carries the state when the chunk ends first.
+ */
 export function skipOpenEscapeContinuation(
   statePrefix: string,
   chunk: string
 ): { rest: string; stillOpen: string } {
-  const length = openEscapeContinuationLength(statePrefix, chunk)
-  return length === -1
-    ? { rest: '', stillOpen: advanceTerminalEscapeBoundary(statePrefix, chunk) }
-    : { rest: chunk.slice(length), stillOpen: '' }
+  const cursor = VtCursor.fromKey(statePrefix)
+  let executed = ''
+  for (let i = 0; i < chunk.length; i++) {
+    if (cursor.key === '') {
+      return { rest: executed + chunk.slice(i), stillOpen: '' }
+    }
+    const code = chunk.charCodeAt(i)
+    const state = cursor.state
+    if (startsVtSequence(code)) {
+      // A split ESC \ (ST) ending a string is consumed with its backslash.
+      const end =
+        code === ESC && isVtStringState(state) && chunk.charCodeAt(i + 1) === 0x5c ? i + 2 : i
+      return { rest: executed + chunk.slice(end), stillOpen: '' }
+    }
+    if (code === CAN || code === SUB || code === ST) {
+      return { rest: executed + chunk.slice(i + 1), stillOpen: '' }
+    }
+    if (cursor.heldSurrogateEndsSequence() && !isLowSurrogate(code)) {
+      // The held high surrogate decodes alone and ends the sequence; this unit parses from ground.
+      return { rest: executed + chunk.slice(i), stillOpen: '' }
+    }
+    if (executesWithinVtState(state, code)) {
+      executed += chunk[i]
+    }
+    cursor.feed(code)
+    if (cursor.state === VtState.Ground) {
+      // Another C1 control executes as it ends the sequence, so it stays; anything else was swallowed.
+      const end = code >= 0x80 && code <= 0x9f ? i : i + 1
+      return { rest: executed + chunk.slice(end), stillOpen: '' }
+    }
+  }
+  return { rest: executed, stillOpen: cursor.key }
 }
 
 /** Advance the incremental tail; abandon it past the cap. */
 export function advancePartialEscapeTail(pendingTail: string, chunk: string): string {
-  // Only ESC leaves ground, so no tail + no ESC avoids concatenation and the full chunk walk.
-  if (pendingTail.length === 0 && !chunk.includes('\x1b')) {
+  // No tail and no sequence start avoids concatenation and the full chunk walk.
+  if (pendingTail.length === 0 && !hasSequenceStart(chunk)) {
     return ''
   }
   const tail = extractPartialEscapeTail(pendingTail + chunk)

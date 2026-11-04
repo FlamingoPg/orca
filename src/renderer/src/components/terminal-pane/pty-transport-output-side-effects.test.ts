@@ -35,7 +35,10 @@ describe('createIpcPtyTransport', () => {
 
     onData?.({ id: 'pty-1', data: '\u001b]0;title-one\u0007body' })
 
-    expect(onDataCallback).toHaveBeenCalledWith('\u001b]0;title-one\u0007body')
+    expect(onDataCallback).toHaveBeenCalledWith('\u001b]0;title-one\u0007body', {
+      rawLength: 18,
+      startEscapeState: ''
+    })
     expect(onTitleChange).not.toHaveBeenCalled()
 
     await flushPtySideEffects()
@@ -54,7 +57,10 @@ describe('createIpcPtyTransport', () => {
 
     onData?.({ id: 'pty-1', data: '\u001b]0;hidden-title\u0007' })
 
-    expect(onDataCallback).toHaveBeenCalledWith('\u001b]0;hidden-title\u0007')
+    expect(onDataCallback).toHaveBeenCalledWith('\u001b]0;hidden-title\u0007', {
+      rawLength: 17,
+      startEscapeState: ''
+    })
     expect(onTitleChange).not.toHaveBeenCalled()
 
     await flushPtySideEffects()

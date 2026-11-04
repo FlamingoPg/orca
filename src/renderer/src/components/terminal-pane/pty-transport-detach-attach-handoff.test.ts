@@ -109,7 +109,10 @@ describe('createIpcPtyTransport', () => {
     onData?.({ id: 'pty-1', data: 'live output' })
     onReplay?.({ id: 'pty-1', data: 'replay output' })
 
-    expect(receivedByNewPane).toHaveBeenCalledWith('live output')
+    expect(receivedByNewPane).toHaveBeenCalledWith('live output', {
+      rawLength: 11,
+      startEscapeState: ''
+    })
     expect(replayedToNewPane).toHaveBeenCalledWith('replay output')
     expect(receivedByOldPane).not.toHaveBeenCalled()
 
@@ -134,10 +137,16 @@ describe('createIpcPtyTransport', () => {
       callbacks: { onData: receivedByNewPane }
     })
 
-    expect(receivedByNewPane).toHaveBeenCalledWith('buffered while detached')
+    expect(receivedByNewPane).toHaveBeenCalledWith('buffered while detached', {
+      rawLength: 23,
+      startEscapeState: ''
+    })
 
     onData?.({ id: 'pty-1', data: 'live after reattach' })
-    expect(receivedByNewPane).toHaveBeenCalledWith('live after reattach')
+    expect(receivedByNewPane).toHaveBeenCalledWith('live after reattach', {
+      rawLength: 19,
+      startEscapeState: ''
+    })
   })
 
   it('keeps the exit observer alive after detach so remounts do not reuse dead PTYs', async () => {

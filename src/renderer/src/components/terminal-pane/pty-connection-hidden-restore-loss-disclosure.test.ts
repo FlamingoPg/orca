@@ -619,7 +619,7 @@ describe('hidden-output restore loss disclosure (STA-4869)', () => {
     // #33766: main labels the first chunk after its hidden drop with the escape the drop left open.
     async function abandonAfterResumedChunk(
       resumed: string,
-      gapEscapeState?: string,
+      startEscapeState?: string,
       transform?: { rawLength: number }
     ) {
       vi.mocked(window.api.pty.getMainBufferSnapshot).mockResolvedValue(null)
@@ -632,7 +632,7 @@ describe('hidden-output restore loss disclosure (STA-4869)', () => {
         seq: HIDDEN_FLOOD.length + rawLength,
         rawLength,
         ...(transform ? { transformed: true } : {}),
-        ...(gapEscapeState ? { gapEscapeState } : {})
+        ...(startEscapeState ? { startEscapeState } : {})
       })
       await flushAsyncTicks(20)
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -654,8 +654,8 @@ describe('hidden-output restore loss disclosure (STA-4869)', () => {
       ['an SGR sequence', '\x1b[', ';5;242m> prompt', ';242m']
     ])(
       'skips the tail of %s main says the gap left open',
-      async (_name, gapEscapeState, resumed, tail) => {
-        const screen = await abandonAfterResumedChunk(resumed, gapEscapeState)
+      async (_name, startEscapeState, resumed, tail) => {
+        const screen = await abandonAfterResumedChunk(resumed, startEscapeState)
         expect({
           banner: screen.includes(BANNER_FRAGMENT),
           prompt: screen.includes('> prompt'),
@@ -690,7 +690,8 @@ describe('hidden-output restore loss disclosure (STA-4869)', () => {
       drive.deliverWithMeta?.(resumed, {
         seq: HIDDEN_FLOOD.length + resumed.length,
         rawLength: resumed.length,
-        gapEscapeState: '\x1b['
+        // Main's state after `\x1b[38;5`: a CSI with parameters, matching the snapshot's tail.
+        startEscapeState: '\x1b[0'
       })
       await allowRecoveryWindow()
       drive.disposable.dispose()

@@ -231,7 +231,7 @@ describe('registerPtyHandlers', () => {
 
       expect(getPtyDataSendCalls().at(-1)).toEqual([
         'pty:data',
-        { id: 'writeoff-held', data: 'held' }
+        { id: 'writeoff-held', data: 'held', startEscapeState: null }
       ])
     } finally {
       warnSpy.mockRestore()

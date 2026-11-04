@@ -1,5 +1,6 @@
 import type { PtyDataMeta } from './pty-dispatcher'
 import { flattenRetainedSlice } from '../../lib/flatten-retained-slice'
+import { startEscapeStateOfSuffix } from './terminal-escape-admission'
 
 export const MAX_DEFERRED_REATTACH_LIVE_CHARS = 512 * 1024
 export const MAX_DEFERRED_REATTACH_LIVE_CHUNKS = 1_024
@@ -21,6 +22,25 @@ export type DeferredReattachLiveDataQueueStorage = {
   retainedChunks: number
 }
 
+function truncateHead(chunk: DeferredReattachLiveDataChunk): DeferredReattachLiveDataChunk {
+  const data = flattenRetainedSlice(chunk.data.slice(-MAX_DEFERRED_REATTACH_LIVE_CHARS))
+  if (chunk.meta?.startEscapeState === undefined) {
+    return { ...chunk, data }
+  }
+  // The kept tail starts where the dropped head left the parser.
+  const meta: PtyDataMeta = { ...chunk.meta }
+  const startEscapeState = startEscapeStateOfSuffix(
+    { data: chunk.data, startEscapeState: chunk.meta.startEscapeState },
+    data
+  )
+  if (startEscapeState === undefined) {
+    delete meta.startEscapeState
+  } else {
+    meta.startEscapeState = startEscapeState
+  }
+  return { ...chunk, data, meta }
+}
+
 export class DeferredReattachLiveDataQueue {
   private chunks: (DeferredReattachLiveDataChunk | undefined)[] = []
   private head = 0
@@ -34,12 +54,7 @@ export class DeferredReattachLiveDataQueue {
     this.streamGeneration = chunk.streamGeneration
 
     const oversized = chunk.data.length > MAX_DEFERRED_REATTACH_LIVE_CHARS
-    const queuedChunk = {
-      ...chunk,
-      data: oversized
-        ? flattenRetainedSlice(chunk.data.slice(-MAX_DEFERRED_REATTACH_LIVE_CHARS))
-        : chunk.data
-    }
+    const queuedChunk = oversized ? truncateHead(chunk) : { ...chunk }
     this.chunks.push(queuedChunk)
     this.retainedChars += queuedChunk.data.length
 

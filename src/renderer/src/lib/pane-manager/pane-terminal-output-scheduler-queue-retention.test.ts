@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { loadScheduler } from './pane-terminal-output-scheduler-test-harness'
+import { createTerminal, loadScheduler } from './pane-terminal-output-scheduler-test-harness'
 
 vi.mock('@/lib/e2e-config', () => ({
   e2eConfig: { exposeStore: true }
@@ -25,6 +25,27 @@ describe('pane terminal output scheduler', () => {
     delete (globalThis as { __terminalOutputSchedulerDebug?: unknown })
       .__terminalOutputSchedulerDebug
     vi.unstubAllGlobals()
+  })
+
+  it('reports every backlog replacement so the pane can ground its parser tracking', async () => {
+    // The warning's CAN grounds xterm; queued bytes, including an open escape, never parse.
+    vi.useFakeTimers()
+    const { writeTerminalOutput } = await loadScheduler()
+    const terminal = createTerminal()
+    const onBacklogReplaced = vi.fn()
+    const onBackgroundBacklogDropped = vi.fn()
+    const chunk = `${'x'.repeat(512 * 1024)}\x1b[`
+
+    for (let i = 0; i < 9; i++) {
+      writeTerminalOutput(terminal, chunk, {
+        foreground: false,
+        onBacklogReplaced,
+        onBackgroundBacklogDropped
+      })
+    }
+
+    expect(onBackgroundBacklogDropped).toHaveBeenCalledTimes(1)
+    expect(onBacklogReplaced.mock.calls.length).toBeGreaterThan(1)
   })
 
   describe('queue memory retention (STA-3567)', () => {

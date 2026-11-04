@@ -94,7 +94,7 @@ describe('createIpcPtyTransport', () => {
       url: '',
       callbacks: { onData: onOutput, onExit: onEnd }
     })
-    expect(onOutput).toHaveBeenCalledWith('final output')
+    expect(onOutput).toHaveBeenCalledWith('final output', { rawLength: 12, startEscapeState: '' })
     expect(onEnd).toHaveBeenCalledWith(23)
     expect(result).toEqual({ id: creator.result.id, exitedBeforeAttach: true })
     transport.detach?.()

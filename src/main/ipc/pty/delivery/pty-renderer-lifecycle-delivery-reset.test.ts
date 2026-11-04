@@ -473,7 +473,7 @@ describe('PTY renderer send recovery', () => {
       vi.advanceTimersByTime(2)
 
       expect(getPtyDataSendCalls()).toEqual([
-        ['pty:data', { id: 'send-fail-partial', data: firstChunk }]
+        ['pty:data', { id: 'send-fail-partial', data: firstChunk, startEscapeState: null }]
       ])
       expect(getPtyRendererDeliveryDebugSnapshot()).toMatchObject({
         pendingPtyCount: 1,
@@ -485,8 +485,8 @@ describe('PTY renderer send recovery', () => {
 
       vi.advanceTimersByTime(1)
       expect(getPtyDataSendCalls()).toEqual([
-        ['pty:data', { id: 'send-fail-partial', data: firstChunk }],
-        ['pty:data', { id: 'send-fail-partial', data: 'tail' }]
+        ['pty:data', { id: 'send-fail-partial', data: firstChunk, startEscapeState: null }],
+        ['pty:data', { id: 'send-fail-partial', data: 'tail', startEscapeState: null }]
       ])
       expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:modelRestoreNeeded', {
         id: 'send-fail-partial',
@@ -527,7 +527,7 @@ describe('PTY renderer send recovery', () => {
       vi.advanceTimersByTime(2)
 
       expect(getPtyDataSendCalls()).toEqual([
-        ['pty:data', { id: 'send-fail-reset', data: 'repainted-page-data' }]
+        ['pty:data', { id: 'send-fail-reset', data: 'repainted-page-data', startEscapeState: null }]
       ])
       expect(
         mainWindow.webContents.send.mock.calls.filter(
@@ -602,7 +602,9 @@ describe('PTY renderer send recovery', () => {
 
       provider.emitExit('send-fail-exit', 7)
 
-      expect(getPtyDataSendCalls()).toEqual([['pty:data', { id: 'send-fail-exit', data: pending }]])
+      expect(getPtyDataSendCalls()).toEqual([
+        ['pty:data', { id: 'send-fail-exit', data: pending, startEscapeState: null }]
+      ])
       expect(
         mainWindow.webContents.send.mock.calls.filter((call) => call[0] === 'pty:exit')
       ).toEqual([['pty:exit', { id: 'send-fail-exit', code: 7, hostId: 'local' }]])

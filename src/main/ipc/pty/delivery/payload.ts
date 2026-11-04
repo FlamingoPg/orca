@@ -3,6 +3,7 @@ import type { PtyModelRestoreReason } from '../../../../shared/terminal/replay/p
 import { mainDeliveryBreadcrumbs } from './debug'
 import { recordPtyRendererDeliveryPressure } from './accounting'
 import type { PtyDataPayload, PtyIpcSession } from '../session'
+import { escapeBoundaryField, type PtyEscapeBoundary } from './pty-escape-boundary'
 
 export function makePtyDataPayload(
   id: string,
@@ -11,12 +12,9 @@ export function makePtyDataPayload(
   containsBackgroundOutput: boolean | undefined,
   rawLength = data.length,
   transformed = false,
-  gapEscapeState?: string
+  startEscapeState?: PtyEscapeBoundary
 ): PtyDataPayload {
-  const payload: PtyDataPayload = { id, data }
-  if (gapEscapeState) {
-    payload.gapEscapeState = gapEscapeState
-  }
+  const payload: PtyDataPayload = { id, data, ...escapeBoundaryField(startEscapeState) }
   if (typeof startSeq === 'number') {
     payload.seq = startSeq + rawLength
   }

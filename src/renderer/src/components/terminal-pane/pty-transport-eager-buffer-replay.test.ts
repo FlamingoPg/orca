@@ -345,7 +345,10 @@ describe('createIpcPtyTransport', () => {
       data: 'live output'
     })
 
-    expect(onDataCallback).toHaveBeenCalledWith('live output')
+    expect(onDataCallback).toHaveBeenCalledWith('live output', {
+      rawLength: 11,
+      startEscapeState: ''
+    })
   })
 
   it('does not clear before replaying OSC 9999-only eager-buffered output', async () => {

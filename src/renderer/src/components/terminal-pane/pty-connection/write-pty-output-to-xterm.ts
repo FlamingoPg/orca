@@ -112,6 +112,7 @@ export function bindWritePtyOutputToXterm(session: ConnectPanePtySession): void 
       // Why: every scheduler write claims one child so a split delivery is credited only after all children parse or discard.
       ackCredit: takeCurrentTerminalDeliveryCredit() ?? undefined,
       onBackgroundBacklogDropped: session.markHiddenOutputRestoreNeeded,
+      onBacklogReplaced: () => session.idleCursorReset.noteParserGrounded(),
       latencySensitive:
         !foreground || parseHiddenStartupOutput
           ? true

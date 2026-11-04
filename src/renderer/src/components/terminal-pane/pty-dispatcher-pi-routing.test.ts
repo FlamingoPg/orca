@@ -81,7 +81,11 @@ describe('dispatcher → transport → onTitleChange for Pi spinner', () => {
 
     dispatcherCallback?.({ id: 'pty-pi', data: 'chunk', rawLength: 10, background: true } as never)
 
-    expect(handler).toHaveBeenCalledWith('chunk', { rawLength: 10, background: true })
+    expect(handler).toHaveBeenCalledWith('chunk', {
+      rawLength: 10,
+      background: true,
+      startEscapeState: ''
+    })
     expect(window.api.pty.ackData).toHaveBeenCalledWith('pty-pi', 10, 10)
     ptyDataHandlers.delete('pty-pi')
   })
@@ -261,7 +265,10 @@ describe('dispatcher → transport → onTitleChange for Pi spinner', () => {
     resolveSpawn({ id: 'pty-early' })
     await connectPromise
 
-    expect(onData).toHaveBeenCalledWith('setup starts here\r\n', { rawLength: 19 })
+    expect(onData).toHaveBeenCalledWith('setup starts here\r\n', {
+      rawLength: 19,
+      startEscapeState: ''
+    })
 
     transport.disconnect()
   })
@@ -287,7 +294,10 @@ describe('dispatcher → transport → onTitleChange for Pi spinner', () => {
       callbacks: { onData }
     })
 
-    expect(onData).toHaveBeenCalledWith('live before pane\r\n', { rawLength: 18 })
+    expect(onData).toHaveBeenCalledWith('live before pane\r\n', {
+      rawLength: 18,
+      startEscapeState: ''
+    })
     transport.disconnect()
   })
 

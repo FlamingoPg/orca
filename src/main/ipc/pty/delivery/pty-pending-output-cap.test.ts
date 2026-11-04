@@ -286,7 +286,7 @@ describe('PTY producer flow control', () => {
 
       expect(provider.resumeProducer).toHaveBeenCalledTimes(1)
       expect(mainWindow.webContents.send.mock.calls).toEqual([
-        ['pty:data', { id: 'flood-pty', data: finalPendingData }],
+        ['pty:data', { id: 'flood-pty', data: finalPendingData, startEscapeState: null }],
         ['pty:exit', { id: 'flood-pty', code: 0, hostId: 'local' }]
       ])
       expect(
@@ -334,7 +334,7 @@ describe('PTY producer flow control', () => {
       vi.advanceTimersByTime(2)
 
       expect(getPtyDataSendCalls()).toEqual([
-        ['pty:data', { id: 'send-fail-complete', data: 'lost-once' }]
+        ['pty:data', { id: 'send-fail-complete', data: 'lost-once', startEscapeState: null }]
       ])
       expect(getPtyRendererDeliveryDebugSnapshot()).toMatchObject({
         pendingPtyCount: 0,
@@ -348,8 +348,8 @@ describe('PTY producer flow control', () => {
       provider.emitData('send-fail-complete', 'recovery')
       vi.advanceTimersByTime(2)
       expect(getPtyDataSendCalls()).toEqual([
-        ['pty:data', { id: 'send-fail-complete', data: 'lost-once' }],
-        ['pty:data', { id: 'send-fail-complete', data: 'recovery' }]
+        ['pty:data', { id: 'send-fail-complete', data: 'lost-once', startEscapeState: null }],
+        ['pty:data', { id: 'send-fail-complete', data: 'recovery', startEscapeState: null }]
       ])
       expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:modelRestoreNeeded', {
         id: 'send-fail-complete',
@@ -364,7 +364,7 @@ describe('PTY producer flow control', () => {
       ).toHaveLength(2)
       expect(getPtyDataSendCalls().at(-1)).toEqual([
         'pty:data',
-        { id: 'send-fail-complete', data: 'after-marker-failure' }
+        { id: 'send-fail-complete', data: 'after-marker-failure', startEscapeState: null }
       ])
     } finally {
       errorSpy.mockRestore()

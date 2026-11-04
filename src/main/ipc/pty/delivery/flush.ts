@@ -2,6 +2,7 @@ import {
   recordHiddenRendererPtyDataDrop,
   shouldDropHiddenRendererPtyData
 } from './pty-hidden-delivery-gate'
+import { advanceEscapeBoundary, escapeBoundaryField } from './pty-escape-boundary'
 import type { PendingPtyData } from './pty-pending-data-drain-contract'
 import { activeRendererPtys } from './visibility-state'
 import {
@@ -162,6 +163,15 @@ export function flushPendingData(session: PtyIpcSession): void {
         if (pending.containsBackgroundOutput === true) {
           nextPending.containsBackgroundOutput = true
         }
+        Object.assign(
+          nextPending,
+          escapeBoundaryField(
+            advanceEscapeBoundary(
+              pending.startEscapeState === undefined ? '' : pending.startEscapeState,
+              chunk
+            )
+          )
+        )
         session.pendingData.replaceWithRemainder(selection, nextPending)
       } else {
         session.pendingData.remove(selection)
@@ -178,7 +188,7 @@ export function flushPendingData(session: PtyIpcSession): void {
           pending.containsBackgroundOutput,
           pending.rawLength,
           pending.transformed,
-          pending.gapEscapeState
+          pending.startEscapeState
         )
       )
       if (!sent) {

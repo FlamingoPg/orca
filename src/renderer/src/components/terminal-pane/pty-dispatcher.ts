@@ -54,8 +54,8 @@ export type PtyDataMeta = {
   background?: boolean
   /** Main dropped this PTY's buffered output at the pending cap; repaint from the main-owned snapshot, not the live stream. */
   droppedOutput?: boolean
-  /** Escape main's dropped bytes left open where this chunk begins; only an abandoned restore uses it. */
-  gapEscapeState?: string
+  /** Escape-parser state the PTY stream is in where this chunk begins ('' = ground); absent when unknown (remote-runtime frames, reshaped chunks). */
+  startEscapeState?: string
 }
 
 /** Sidecar PTY-data observers, invoked AFTER the primary handler so a side-effect-only watcher can't delay xterm rendering. */
@@ -118,7 +118,7 @@ function handleDispatchedPtyData(payload: {
   transformed?: boolean
   background?: boolean
   droppedOutput?: boolean
-  gapEscapeState?: string
+  startEscapeState?: string | null
 }): void {
   let meta: PtyDataMeta | undefined
   if (typeof payload.seq === 'number') {
@@ -141,9 +141,10 @@ function handleDispatchedPtyData(payload: {
     meta ??= {}
     meta.droppedOutput = true
   }
-  if (typeof payload.gapEscapeState === 'string' && payload.gapEscapeState.length > 0) {
+  // Main omits ground and sends null when it cannot know; the drop sentinel is not stream bytes.
+  if (payload.droppedOutput !== true && payload.startEscapeState !== null) {
     meta ??= {}
-    meta.gapEscapeState = payload.gapEscapeState
+    meta.startEscapeState = payload.startEscapeState ?? ''
   }
   const chars = payload.rawLength ?? payload.data.length
   const dispatch = (): void => {

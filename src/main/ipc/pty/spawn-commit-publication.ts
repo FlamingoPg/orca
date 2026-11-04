@@ -9,6 +9,7 @@ import {
 import { closeStartupQueryAuthorityForPty } from './provider/registry'
 import { commitAttachedPtySize } from './delivery/attached-pty-size'
 import { ptySizes } from './delivery/visibility-state'
+import { markPtyEscapeBoundaryFresh } from './delivery/pty-escape-boundary'
 import { rememberPaneKeyForPty } from './pane/key-state'
 import {
   pendingByPaneKey,
@@ -37,6 +38,9 @@ export function publishCommittedPtySpawn(input: PtySpawnCommitInput): PtySpawnOu
     { ...result, spawnRequestedAt: state.spawnRequestedAt },
     input.expectedSourceBinding
   )
+  if (result.isReattach !== true) {
+    markPtyEscapeBoundaryFresh(result.id)
+  }
   input.spawnTiming?.log(result.id, {
     daemon: state.isDaemonHostSpawn,
     reattach: result.isReattach ?? false

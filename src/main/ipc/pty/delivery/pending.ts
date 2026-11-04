@@ -13,6 +13,7 @@ import { recordCrashBreadcrumb } from '../../../crash-reporting/crash-breadcrumb
 import { terminalOutputBacklogCapChars } from '../../../../shared/terminal/replay/terminal-scrollback-policy'
 import { isHiddenPtyDeliveryGateEnabled } from './pty-hidden-delivery-gate'
 import type { PendingPtyData } from './pty-pending-data-drain-contract'
+import { escapeBoundaryField, type PtyEscapeBoundary } from './pty-escape-boundary'
 import { DROPPED_QUERY_SALVAGE_MAX_CHARS } from './constants'
 import type { PtyIpcSession } from '../session'
 
@@ -108,7 +109,7 @@ export function appendPendingPtyData(
   containsBackgroundOutput: boolean,
   rawLength = data.length,
   transformed = false,
-  gapEscapeState?: string
+  startEscapeState?: PtyEscapeBoundary
 ): PendingPtyData {
   // Once dropped, keep bounded query/mode state while the restore sentinel supersedes ordinary output.
   if (existing?.droppedOutput === true) {
@@ -142,7 +143,7 @@ export function appendPendingPtyData(
       ...(rawLength !== data.length ? { rawLength } : {}),
       ...(transformed ? { transformed: true } : {}),
       ...(nextContainsBackgroundOutput ? { containsBackgroundOutput: true } : {}),
-      ...(gapEscapeState ? { gapEscapeState } : {})
+      ...escapeBoundaryField(startEscapeState)
     }
     return dropOversizedPendingPtyData(session, id, pending)
   }
@@ -153,8 +154,8 @@ export function appendPendingPtyData(
       ? { rawLength: existingRawLength + rawLength, transformed: true as const }
       : {}),
     ...(nextContainsBackgroundOutput ? { containsBackgroundOutput: true } : {}),
-    // Describes the batch start; a gap inside an existing batch has no start to label.
-    ...(existing.gapEscapeState ? { gapEscapeState: existing.gapEscapeState } : {})
+    // Describes the batch start; appended bytes continue it.
+    ...escapeBoundaryField(existing.startEscapeState)
   }
   if (typeof existing.startSeq === 'number') {
     next.startSeq = existing.startSeq

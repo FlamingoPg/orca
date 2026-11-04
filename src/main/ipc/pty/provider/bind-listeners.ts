@@ -14,6 +14,10 @@ import { localProvider } from './registry'
 import { clearProviderPtyState } from './state-cleanup'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { providerSnapshotRequiredPtys, visibleRendererPtys } from '../delivery/visibility-state'
+import {
+  markPtyProviderStreamGap,
+  realignPtyDataAfterProviderGap
+} from '../delivery/pty-escape-boundary'
 import type { PtyIpcSession } from '../session'
 import { publishPtyEndpointLoss } from '../../../runtime/terminal/pty-endpoint-loss-signal'
 
@@ -54,6 +58,7 @@ export function bindProviderListeners(session: PtyIpcSession): void {
       }
       if (payload.kind === 'dataGap') {
         providerSnapshotRequiredPtys.add(payload.id)
+        markPtyProviderStreamGap(payload.id)
         session.runtime?.notePtyDataGap(payload.id, payload.sequenceChars ?? payload.droppedChars)
         session.sendModelRestoreNeededMarker(
           payload.id,
@@ -68,8 +73,19 @@ export function bindProviderListeners(session: PtyIpcSession): void {
 
   // Feed the runtime unless the emitting provider already did via configure().
   setLocalDataUnsub(
-    localProvider.onData((payload) => {
-      const rawLength = payload.sequenceChars ?? payload.data.length
+    localProvider.onData((delivered) => {
+      const rawLength = delivered.sequenceChars ?? delivered.data.length
+      const realigned = realignPtyDataAfterProviderGap(delivered.id, delivered.data, rawLength)
+      // Trimmed text no longer maps 1:1 onto source seq; keep the full source length.
+      const payload =
+        realigned.skippedChars === 0
+          ? delivered
+          : {
+              ...delivered,
+              data: realigned.data,
+              sequenceChars: rawLength,
+              transformed: true as const
+            }
       const outputSeq = payload.runtimeFed
         ? session.runtime?.getPtyOutputSequence(payload.id)
         : session.runtime?.onPtyData(

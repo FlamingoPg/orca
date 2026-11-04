@@ -122,8 +122,8 @@ export function bindHiddenOutputRestoreChunk(session: ConnectPanePtySession): vo
     if (typeof meta?.rawLength === 'number') {
       pending.rawLength = meta.rawLength
     }
-    if (meta?.gapEscapeState) {
-      pending.gapEscapeState = meta.gapEscapeState
+    if (meta?.startEscapeState !== undefined) {
+      pending.startEscapeState = meta.startEscapeState
     }
     session.hiddenOutputRestorePendingChunks.push(pending)
     session.hiddenOutputRestorePendingChars += data.length

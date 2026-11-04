@@ -50,7 +50,7 @@ vi.mock('../../../codex/history/index/codex-state-db-backfill-recovery', () =>
 // The observable daemon provider adopts the spawn's sessionId as the PTY id.
 const PTY_ID = 'daemon-session'
 
-describe('the first delivery after a hidden drop (#33766)', () => {
+describe('the escape state main reports for each delivery', () => {
   const {
     handlers,
     mainWindow,
@@ -103,22 +103,96 @@ describe('the first delivery after a hidden drop (#33766)', () => {
       'ial refactoring PRs | cleanup-dumb-exports\x07> prompt',
       '\x1b]'
     ],
-    ['an SGR sequence', 'diff \x1b[38;5', ';242m+ line', '\x1b['],
+    ['an SGR sequence', 'diff \x1b[38;5', ';242m+ line', '\x1b[0'],
     ['a CSI whose ESC alone was dropped', 'diff \x1b', '[38;5;242m+ line', '\x1b']
   ])(
     'labels the first delivery after a drop that split %s, without trimming it',
-    async (_name, dropped, resumed, gapEscapeState) => {
+    async (_name, dropped, resumed, startEscapeState) => {
       const { delivered, seq } = await hideDropAndResume(dropped, resumed)
       // A restore whose snapshot carries the open escape still needs every continuation byte.
       expect(delivered).toEqual([
-        { id: expect.any(String), data: resumed, seq, rawLength: resumed.length, gapEscapeState }
+        { id: expect.any(String), data: resumed, seq, rawLength: resumed.length, startEscapeState }
       ])
     }
   )
 
-  it('leaves a delivery after a clean drop boundary unlabeled, including a bell after text', async () => {
+  it('reports ground after a clean drop boundary, including a bell after text', async () => {
     const { delivered } = await hideDropAndResume('hidden\x1b[0m', 'build done\x07')
     expect(delivered.map((payload) => payload.data).join('')).toBe('build done\x07')
-    expect(delivered.some((payload) => 'gapEscapeState' in payload)).toBe(false)
+    // Ground is implied when absent.
+    expect(delivered.some((payload) => 'startEscapeState' in payload)).toBe(false)
+  })
+})
+
+describe('the first delivery after a daemon stream gap', () => {
+  const { handlers, mainWindow, installObservableDaemonTestProvider } = setupPtyIpcSuite()
+
+  async function gapThenResume(chunks: string[]) {
+    vi.useFakeTimers()
+    let seq = 0
+    const runtime = {
+      setPtyController: vi.fn(),
+      registerPty: vi.fn(),
+      noteTerminalSpawnCommand: vi.fn(),
+      onPtySpawned: vi.fn(),
+      onPtyExit: vi.fn(),
+      onPtyData: vi.fn((_id: string, _data: string, _at: number, chars: number) => (seq += chars)),
+      notePtyDataGap: vi.fn((_id: string, chars: number) => (seq += chars)),
+      getPtyOutputSequence: vi.fn(() => seq),
+      hasRemoteTerminalViewSubscriber: vi.fn(() => false),
+      createPreAllocatedTerminalHandle: vi.fn(() => null),
+      registerPreAllocatedHandleForPty: vi.fn()
+    }
+    const daemon = installObservableDaemonTestProvider()
+    try {
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the suite's window and runtime stubs cover every member registerPtyHandlers reads.
+      registerPtyHandlers(mainWindow as never, runtime as never)
+      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24, sessionId: PTY_ID })
+      daemon.emitData(PTY_ID, '\x1b[46;3H')
+      vi.advanceTimersByTime(50)
+      mainWindow.webContents.send.mockClear()
+      // The daemon thinned `\x1b[H\r\x1b[15C\x1b[` from Claude's spinner frame and kept its tail.
+      daemon.emitDataGap(PTY_ID, 12)
+      for (const chunk of chunks) {
+        daemon.emitData(PTY_ID, chunk)
+      }
+      vi.advanceTimersByTime(50)
+      const delivered = mainWindow.webContents.send.mock.calls
+        .filter(([channel]) => channel === 'pty:data')
+        .map(([, payload]): Record<string, unknown> => payload)
+      return { delivered, seq, runtime }
+    } finally {
+      vi.useRealTimers()
+    }
+  }
+
+  it('drops the orphaned tail of an escape the daemon cut, keeping the source seq', async () => {
+    const tail = '42B\x1b[K\x1b[50;1H\x1b[46;3H'
+    const { delivered, seq, runtime } = await gapThenResume([tail])
+    expect(delivered).toEqual([
+      {
+        id: PTY_ID,
+        data: '\x1b[K\x1b[50;1H\x1b[46;3H',
+        seq,
+        rawLength: tail.length,
+        transformed: true
+      }
+    ])
+    // Main's model must not parse the orphaned tail either.
+    expect(runtime.onPtyData).toHaveBeenLastCalledWith(
+      PTY_ID,
+      '\x1b[K\x1b[50;1H\x1b[46;3H',
+      expect.any(Number),
+      tail.length,
+      true
+    )
+  })
+
+  it('passes an escape-free first delivery through as unknown instead of withholding text', async () => {
+    const { delivered } = await gapThenResume(['2B more text', 'x\x1b[Ky'])
+    // Both payloads batch into one delivery whose start main cannot vouch for.
+    expect(delivered.map((payload) => [payload.data, payload.startEscapeState])).toEqual([
+      ['2B more textx\x1b[Ky', null]
+    ])
   })
 })

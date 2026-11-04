@@ -11,6 +11,11 @@ export class TerminalIdleCursorReset {
     return this.escapeState
   }
 
+  /** Queued bytes were discarded behind a CAN-led warning, so xterm's parser ends grounded. */
+  noteParserGrounded(): void {
+    this.escapeState = ''
+  }
+
   request(): string {
     this.pending = true
     return this.takeReadyReset()

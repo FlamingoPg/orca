@@ -8,7 +8,7 @@ import { sendTerminalOscColorQueryReplies } from '../terminal-capability-replies
 
 import { shouldWritePtyOutputForeground } from './foreground-output-scan'
 import { registerE2eTerminalPtyDataInjection } from './e2e-terminal-pty-harness'
-import { admitResumedAppChunk } from './resume-escape-admission'
+import { admitAppBytes, startEscapeStateOfSuffix } from '../terminal-escape-admission'
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
@@ -23,6 +23,12 @@ export function bindLiveDataCallback(session: ConnectPanePtySession): void {
     }
     const arrivedData = data
     const arrivedMeta = meta
+    // Every renderer-side cut (reconciliation, query carve-out, ordered-seq slice) keeps a suffix of the arrival.
+    const arrivedStartEscapeState = (suffix: string): string | undefined =>
+      startEscapeStateOfSuffix(
+        { data: arrivedData, startEscapeState: arrivedMeta?.startEscapeState },
+        suffix
+      )
     if (session.deferredReattachLiveData !== null) {
       const ackCredit = takeCurrentTerminalDeliveryCredit()
       session.deferredReattachLiveData.enqueue({
@@ -161,8 +167,7 @@ export function bindLiveDataCallback(session: ConnectPanePtySession): void {
         }
         session.queueLiveChunkDuringRestore(
           orderedRendererData,
-          // The gap label describes the chunk's original first byte only.
-          orderedRendererData === arrivedData ? rendererMeta : withoutGapEscapeState(rendererMeta)
+          withStartEscapeState(rendererMeta, arrivedStartEscapeState(orderedRendererData))
         )
         session.requestHiddenOutputRestoreIfNeeded()
       } else if (session.hiddenOutputRestoreInFlight) {
@@ -178,12 +183,11 @@ export function bindLiveDataCallback(session: ConnectPanePtySession): void {
         })
       }
       session.writePtyOutputToXterm(
-        foreground
-          ? admitResumedAppChunk(session, orderedRendererData, {
-              ...arrivedMeta,
-              data: arrivedData
-            })
-          : orderedRendererData,
+        admitAppBytes(
+          orderedRendererData,
+          arrivedStartEscapeState(orderedRendererData),
+          session.idleCursorReset.parserEscape
+        ),
         foreground,
         { liveStartupBatch: true }
       )
@@ -204,11 +208,18 @@ export function bindLiveDataCallback(session: ConnectPanePtySession): void {
   )
 }
 
-function withoutGapEscapeState(meta: PtyDataMeta | undefined): PtyDataMeta | undefined {
-  if (!meta?.gapEscapeState) {
+function withStartEscapeState(
+  meta: PtyDataMeta | undefined,
+  startEscapeState: string | undefined
+): PtyDataMeta | undefined {
+  if (meta?.startEscapeState === startEscapeState) {
     return meta
   }
-  const next = { ...meta }
-  delete next.gapEscapeState
+  const next: PtyDataMeta = { ...meta }
+  if (startEscapeState === undefined) {
+    delete next.startEscapeState
+  } else {
+    next.startEscapeState = startEscapeState
+  }
   return next
 }

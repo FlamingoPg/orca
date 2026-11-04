@@ -69,6 +69,7 @@ export function writeTerminalOutputImpl(
         inheritRecentForegroundSafetyFlush(queued)
       }
       queued.onBackgroundBacklogDropped = options.onBackgroundBacklogDropped
+      queued.onBacklogReplaced = options.onBacklogReplaced
       queued.highPriority = true
       queuedByTerminal.set(terminal, queued)
       enqueueChunk(queued, data, {
@@ -167,6 +168,7 @@ export function writeTerminalOutputImpl(
         queuedByTerminal.set(terminal, queued)
       } else {
         queued.onBackgroundBacklogDropped = options.onBackgroundBacklogDropped
+        queued.onBacklogReplaced = options.onBacklogReplaced
         queued.highPriority = true
       }
       enqueueChunk(queued, data, {
@@ -231,6 +233,7 @@ export function writeTerminalOutputImpl(
     queuedByTerminal.set(terminal, entry)
   } else {
     entry.onBackgroundBacklogDropped = options.onBackgroundBacklogDropped
+    entry.onBacklogReplaced = options.onBacklogReplaced
   }
   enqueueChunk(entry, data, {
     beforeWrite: options.beforeWrite,

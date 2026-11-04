@@ -103,7 +103,10 @@ describe('createIpcPtyTransport against a relay-recycled PTY id', () => {
     })
     release()
     expect(await pending).toEqual({ id: RECYCLED_PTY_ID, exitedBeforeAttach: true })
-    expect(output).toHaveBeenCalledWith('Authentication failed: sign in again.\r\n')
+    expect(output).toHaveBeenCalledWith('Authentication failed: sign in again.\r\n', {
+      rawLength: 39,
+      startEscapeState: ''
+    })
     expect(exit).toHaveBeenCalledWith(1)
     expect(output.mock.invocationCallOrder[0]).toBeLessThan(exit.mock.invocationCallOrder[0])
     expect(error).not.toHaveBeenCalled()

@@ -104,7 +104,8 @@ describe('registerPtyHandlers', () => {
 
       expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:data', {
         id: 'remote-like-pty',
-        data: 'remote-output'
+        data: 'remote-output',
+        startEscapeState: null
       })
 
       // Stale/duplicate renderer ACKs must not over-credit SSH/relay transport.

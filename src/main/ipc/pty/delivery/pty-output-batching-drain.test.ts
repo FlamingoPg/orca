@@ -143,7 +143,9 @@ describe('registerPtyHandlers', () => {
         data: 'daemon-ready',
         seq: query.length + 'daemon-ready'.length,
         rawLength: query.length + 'daemon-ready'.length,
-        transformed: true
+        transformed: true,
+        // Output that beats the spawn commit leaves main unable to vouch for the stream's start.
+        startEscapeState: null
       })
     } finally {
       vi.useRealTimers()

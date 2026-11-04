@@ -2,5 +2,6 @@ export type PendingHiddenOutputRestoreChunk = {
   data: string
   seq?: number
   rawLength?: number
-  gapEscapeState?: string
+  /** Parser state where `data` begins; see PtyDataMeta.startEscapeState. */
+  startEscapeState?: string
 }

@@ -86,7 +86,7 @@ describe('createIpcPtyTransport', () => {
     onData?.({ id: 'pty-new', data: 'new data' })
     onReplay?.({ id: 'pty-new', data: 'new replay' })
 
-    expect(onDataCallback).toHaveBeenCalledWith('new data')
+    expect(onDataCallback).toHaveBeenCalledWith('new data', { rawLength: 8, startEscapeState: '' })
     expect(onReplayData).toHaveBeenCalledWith('new replay')
   })
 
@@ -154,10 +154,16 @@ describe('createIpcPtyTransport', () => {
     expect(onDataCallback).not.toHaveBeenCalled()
 
     restorePtyDataHandlersAfterFailedShutdown(snapshots)
-    expect(onDataCallback).toHaveBeenCalledWith('final burst while detached')
+    expect(onDataCallback).toHaveBeenCalledWith('final burst while detached', {
+      rawLength: 26,
+      startEscapeState: ''
+    })
     onData?.({ id: 'pty-1', data: 'live again' })
 
-    expect(onDataCallback).toHaveBeenCalledWith('live again')
+    expect(onDataCallback).toHaveBeenCalledWith('live again', {
+      rawLength: 10,
+      startEscapeState: ''
+    })
   })
 
   it('retains rollback replay until a pane detached during sleep registers again', async () => {
@@ -203,7 +209,10 @@ describe('createIpcPtyTransport', () => {
     expect(sidecar).not.toHaveBeenCalled()
 
     restorePtyDataHandlersAfterFailedShutdown(second)
-    expect(onDataCallback).toHaveBeenCalledWith('buffered while both owners are pending')
+    expect(onDataCallback).toHaveBeenCalledWith('buffered while both owners are pending', {
+      rawLength: 38,
+      startEscapeState: ''
+    })
     expect(sidecar).toHaveBeenCalledWith('buffered while both owners are pending')
     ptyDataSidecars.delete('pty-1')
   })

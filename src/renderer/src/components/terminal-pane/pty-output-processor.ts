@@ -4,6 +4,7 @@ import {
 } from '../../../../shared/agent-status/title/osc-title-extraction'
 import {
   createAgentStatusOscProcessor,
+  OSC_AGENT_STATUS_PREFIX,
   type ProgramActivityChange
 } from '../../../../shared/agent-status/transport/agent-status-osc'
 import { createProgramStatusSideEffectScanner } from '../../../../shared/terminal-agent-status-processor'
@@ -64,6 +65,8 @@ export function createPtyOutputProcessor({
 }: PtyOutputProcessorOptions) {
   const bellDetector = createBellDetector()
   let processAgentStatusChunk = createAgentStatusOscProcessor()
+  // The agent-status processor may withhold a possible OSC prefix and prepend it to the next chunk.
+  let agentStatusCarryMayPrepend = false
   let scanProgramStatus = createProgramStatusSideEffectScanner()
   let partialEscapeTail = ''
   const titleObserver = createPtyOutputTitleObserver({
@@ -190,6 +193,16 @@ export function createPtyOutputProcessor({
       partialEscapeTail = options.pendingEscapeTailAnsi
     }
     const processed = processAgentStatusChunk(data)
+    // Main's start state describes `data`'s first byte; a prepended carry or a stripped leading
+    // status frame moves that byte, so the state becomes unknown rather than wrong.
+    if (
+      meta?.startEscapeState !== undefined &&
+      (agentStatusCarryMayPrepend || data.startsWith(OSC_AGENT_STATUS_PREFIX))
+    ) {
+      meta = { ...meta }
+      delete meta.startEscapeState
+    }
+    agentStatusCarryMayPrepend = processed.cleanData !== data
     data = processed.cleanData
     const programStatus = scanProgramStatus(data)
     if (options.replayingBufferedData && callbacks.onReplayData) {
@@ -246,6 +259,8 @@ export function createPtyOutputProcessor({
     resetBellDetector: () => bellDetector.reset(),
     resetAgentStatusCarry: () => {
       processAgentStatusChunk = createAgentStatusOscProcessor()
+      // A dropped carry never reached xterm, so main's state for the next chunk holds again.
+      agentStatusCarryMayPrepend = false
       scanProgramStatus = createProgramStatusSideEffectScanner()
     },
     getPendingEscapeTailAnsi: () => partialEscapeTail,
